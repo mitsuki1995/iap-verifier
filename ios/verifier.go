@@ -2,12 +2,11 @@ package ios
 
 import (
 	"fmt"
-	"github.com/mitsuki1995/iap-verifier/common"
 	"github.com/bitly/go-simplejson"
 	"github.com/kataras/golog"
+	"github.com/mitsuki1995/iap-verifier/common"
 	"io/ioutil"
 	"strconv"
-	"time"
 )
 
 const (
@@ -26,6 +25,7 @@ type ActiveTransactionInfo struct {
 	StartTimeMS           float64
 	ExpiryTimeMS          float64
 	IsTrialPeriod         bool
+	PayCount              int
 }
 
 type PendingRenewalInfo struct {
@@ -111,9 +111,8 @@ func verifyReceipt(password string, receiptData string, excludeOldTransactions b
 func findActiveTransactionInfo(someTransactions ...*simplejson.Json) *ActiveTransactionInfo {
 
 	var result *ActiveTransactionInfo
-	var nowMS = float64(time.Now().UnixNano() / 1e6)
 
-	var originalTransactionIDs = make(map[string]bool)
+	var payCounts = make(map[string]int) // key: original_transaction_id
 
 	for _, transactions := range someTransactions {
 		array, err := transactions.Array()
@@ -154,26 +153,23 @@ func findActiveTransactionInfo(someTransactions ...*simplejson.Json) *ActiveTran
 				continue
 			}
 
-			if expiryTimeMS > nowMS {
+			payCounts[originalTransactionID] += 1
 
-				originalTransactionIDs[originalTransactionID] = true
-
-				if result == nil || expiryTimeMS > result.ExpiryTimeMS {
-					startTimeMS, _ := strconv.ParseFloat(transaction.Get("purchase_date_ms").MustString("0"), 64)
-					result = &ActiveTransactionInfo{
-						ProductID:             productID,
-						OriginalTransactionID: originalTransactionID,
-						StartTimeMS:           startTimeMS,
-						ExpiryTimeMS:          expiryTimeMS,
-						IsTrialPeriod:         transaction.Get("is_trial_period").MustBool(false),
-					}
+			if result == nil || expiryTimeMS > result.ExpiryTimeMS {
+				startTimeMS, _ := strconv.ParseFloat(transaction.Get("purchase_date_ms").MustString("0"), 64)
+				result = &ActiveTransactionInfo{
+					ProductID:             productID,
+					OriginalTransactionID: originalTransactionID,
+					StartTimeMS:           startTimeMS,
+					ExpiryTimeMS:          expiryTimeMS,
+					IsTrialPeriod:         transaction.Get("is_trial_period").MustBool(false),
 				}
 			}
 		}
 	}
 
-	if len(originalTransactionIDs) > 1 {
-		golog.Warn("find ", len(originalTransactionIDs), " active transactionInfos, choose one: ", result)
+	if result != nil {
+		result.PayCount = payCounts[result.OriginalTransactionID]
 	}
 
 	return result
