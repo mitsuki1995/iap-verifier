@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"github.com/kataras/golog"
 	"net/http"
 	"time"
 )
@@ -18,7 +17,6 @@ var (
 func PostJSON(url string, body interface{}) (*http.Response, error) {
 	bytesData, err := json.Marshal(body)
 	if err != nil {
-		golog.Warn("PostJSON, Marshal error = ", err.Error())
 		return nil, err
 	}
 
@@ -30,7 +28,6 @@ func PostJSON(url string, body interface{}) (*http.Response, error) {
 		defer request.Body.Close()
 	}
 	if err != nil {
-		golog.Warn("PostJSON, NewRequest error = ", err.Error())
 		return nil, err
 	}
 	request.Header.Set("Content-Type", "application/json;charset=UTF-8")
@@ -40,7 +37,6 @@ func PostJSON(url string, body interface{}) (*http.Response, error) {
 	}
 	response, err := client.Do(request) // Do 方法发送请求，返回 HTTP 回复
 	if err != nil {
-		golog.Warn("PostJSON, Do error = ", err.Error())
 		return nil, err
 	}
 

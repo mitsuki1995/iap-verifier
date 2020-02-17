@@ -3,7 +3,6 @@ package ios
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/kataras/golog"
 	"github.com/mitsuki1995/iap-verifier/common"
 	"io/ioutil"
 )
@@ -80,12 +79,10 @@ func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []
 	for _, receiptInfo := range latestReceiptInfo {
 
 		if len(receiptInfo.CancellationDateMS) > 0 {
-			golog.Info("findActiveReceiptInfo, found canceled transaction")
 			continue
 		}
 
 		if len(receiptInfo.ProductID) == 0 || len(receiptInfo.OriginalTransactionID) == 0 || len(receiptInfo.ExpiresDateMS) == 0 {
-			golog.Warn("findActiveReceiptInfo, invalid receipt info: ", receiptInfo)
 			continue
 		}
 
