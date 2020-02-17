@@ -1,39 +1,17 @@
 package ios
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/bitly/go-simplejson"
 	"github.com/kataras/golog"
 	"github.com/mitsuki1995/iap-verifier/common"
 	"io/ioutil"
-	"strconv"
 )
 
 const (
 	iOSSandboxVerifyURL    = "https://sandbox.itunes.apple.com/verifyReceipt"
 	iOSProductionVerifyURL = "https://buy.itunes.apple.com/verifyReceipt"
 )
-
-type TransactionInfo struct {
-	ActiveTransactionInfo
-	PendingRenewalInfo
-}
-
-type ActiveTransactionInfo struct {
-	ProductID             string
-	OriginalTransactionID string
-	StartTimeMS           float64
-	ExpiryTimeMS          float64
-	IsTrialPeriod         bool
-	PayCount              int
-}
-
-type PendingRenewalInfo struct {
-	AutoRenewProductID     string
-	AutoRenewStatus        string
-	ExpirationIntent       string
-	IsInBillingRetryPeriod string
-}
 
 func Verify(password string, receiptData string, excludeOldTransactions bool, isDebug bool) (*TransactionInfo, error) {
 	return verifyReceipt(password, receiptData, excludeOldTransactions, isDebug, false)
@@ -53,20 +31,20 @@ func verifyReceipt(password string, receiptData string, excludeOldTransactions b
 		"exclude-old-transactions": excludeOldTransactions,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("PostJSON error: %s", err.Error())
+		return nil, fmt.Errorf("post JSON error: %s", err.Error())
 	}
 
 	resultByte, err := ioutil.ReadAll(response.Body)
 	if err != nil {
-		return nil, fmt.Errorf("ReadResponseBody error: %s", err.Error())
+		return nil, fmt.Errorf("read response.Body error: %s", err.Error())
 	}
 
-	resultJson, err := simplejson.NewJson(resultByte)
-	if err != nil {
-		return nil, fmt.Errorf("ParseResponseBody error: %s", err.Error())
+	body := new(ResponseBody)
+	if err := json.Unmarshal(resultByte, body); err != nil {
+		return nil, fmt.Errorf("unmarshal body error: %s", err.Error())
 	}
 
-	status := resultJson.Get("status").MustInt(-1)
+	status := body.Status
 
 	// https://developer.apple.com/library/archive/releasenotes/General/ValidateAppStoreReceipt/Chapters/ValidateRemotely.html
 	if status != 0 {
@@ -84,113 +62,55 @@ func verifyReceipt(password string, receiptData string, excludeOldTransactions b
 		return nil, fmt.Errorf("invalid status: %d", status)
 	}
 
-	receipt := resultJson.Get("receipt")
+	transactionInfo := findTransactionInfo(body.LatestReceiptInfo, body.PendingRenewalInfo)
 
-	// 通过票据解析出来的所有交易信息
-	inAppTransactions := receipt.Get("in_app")
-
-	// 自动续订的最新交易（即使使用老的票据也能够取出最新的交易）
-	latestTransactions := resultJson.Get("latest_receipt_info")
-
-	active := findActiveTransactionInfo(inAppTransactions, latestTransactions)
-
-	if active != nil {
-
-		pendingRenewalInfo := findPendingRenewalInfo(resultJson.Get("pending_renewal_info"), active.ProductID)
-
-		return &TransactionInfo{
-			ActiveTransactionInfo: *active,
-			PendingRenewalInfo:    *pendingRenewalInfo,
-		}, nil
+	if transactionInfo == nil {
+		return nil, common.TransactionNotFoundError
 	}
 
-	return nil, common.TransactionNotFoundError
+	return transactionInfo, nil
 }
 
 // 查找尚未过期且过期时间最靠后的一条交易, 找不到返回 nil
-func findActiveTransactionInfo(someTransactions ...*simplejson.Json) *ActiveTransactionInfo {
-
-	var result *ActiveTransactionInfo
+func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []*RenewalInfo) *TransactionInfo {
 
 	var payCounts = make(map[string]int) // key: original_transaction_id
 
-	for _, transactions := range someTransactions {
-		array, err := transactions.Array()
-		if err != nil {
-			golog.Warn("findActiveTransactionInfo, transactions is not an array")
+	var activeReceiptInfo *ReceiptInfo
+	for _, receiptInfo := range latestReceiptInfo {
+
+		if len(receiptInfo.CancellationDateMS) > 0 {
+			golog.Info("findActiveReceiptInfo, found canceled transaction")
+			continue
 		}
-		for index, length := 0, len(array); index < length; index++ {
-			transaction := transactions.GetIndex(index)
 
-			// Treat a canceled receipt the same as if no purchase had ever been made.
-			// 这里的`cancel`是退款的意思
-			if _, canceled := transaction.CheckGet("cancellation_date"); canceled {
-				golog.Info("findActiveTransactionInfo, found canceled transaction")
-				continue
-			}
+		if len(receiptInfo.ProductID) == 0 || len(receiptInfo.OriginalTransactionID) == 0 || len(receiptInfo.ExpiresDateMS) == 0 {
+			golog.Warn("findActiveReceiptInfo, invalid receipt info: ", receiptInfo)
+			continue
+		}
 
-			productID := transaction.Get("product_id").MustString("")
-			if len(productID) == 0 {
-				golog.Warn("findActiveTransactionInfo, product_id is empty")
-				continue
-			}
+		payCounts[receiptInfo.OriginalTransactionID] += 1
 
-			originalTransactionID := transaction.Get("original_transaction_id").MustString("")
-			if len(originalTransactionID) == 0 {
-				golog.Warn("findActiveTransactionInfo, original_transaction_id is empty")
-				continue
-			}
-
-			expiryTimeStr := transaction.Get("expires_date_ms").MustString("")
-			if len(expiryTimeStr) == 0 {
-				golog.Warn("findActiveTransactionInfo, expires_date_ms is empty")
-				continue
-			}
-
-			expiryTimeMS, err := strconv.ParseFloat(expiryTimeStr, 64)
-			if err != nil {
-				golog.Warn("findActiveTransactionInfo, parse expires_date_ms error = ", err.Error())
-				continue
-			}
-
-			payCounts[originalTransactionID] += 1
-
-			if result == nil || expiryTimeMS > result.ExpiryTimeMS {
-				startTimeMS, _ := strconv.ParseFloat(transaction.Get("purchase_date_ms").MustString("0"), 64)
-				result = &ActiveTransactionInfo{
-					ProductID:             productID,
-					OriginalTransactionID: originalTransactionID,
-					StartTimeMS:           startTimeMS,
-					ExpiryTimeMS:          expiryTimeMS,
-					IsTrialPeriod:         transaction.Get("is_trial_period").MustBool(false),
-				}
-			}
+		if activeReceiptInfo == nil || receiptInfo.ExpiryTime().After(activeReceiptInfo.ExpiryTime()) {
+			activeReceiptInfo = receiptInfo
 		}
 	}
 
-	if result != nil {
-		result.PayCount = payCounts[result.OriginalTransactionID]
+	if activeReceiptInfo == nil {
+		return nil
 	}
 
-	return result
-}
+	transactionInfo := &TransactionInfo{
+		ActiveReceiptInfo: activeReceiptInfo,
+	}
 
-// 找不到返回空
-func findPendingRenewalInfo(infos *simplejson.Json, productID string) *PendingRenewalInfo {
-	length := len(infos.MustArray())
-	for i := 0; i < length; i++ {
-		info := infos.GetIndex(i)
-		pid := info.Get("product_id").MustString()
-		if pid == productID {
+	for _, renewalInfo := range pendingRenewalInfo {
 
-			return &PendingRenewalInfo{
-				AutoRenewProductID:     info.Get("auto_renew_product_id").MustString(),
-				AutoRenewStatus:        info.Get("auto_renew_status").MustString(),
-				ExpirationIntent:       info.Get("expiration_intent").MustString(),
-				IsInBillingRetryPeriod: info.Get("is_in_billing_retry_period").MustString(),
-			}
+		if activeReceiptInfo.ProductID == renewalInfo.ProductID {
+			transactionInfo.RenewalInfo = renewalInfo
+			break
 		}
 	}
 
-	return nil
+	return transactionInfo
 }
