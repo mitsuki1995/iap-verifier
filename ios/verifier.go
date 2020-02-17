@@ -88,7 +88,7 @@ func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []
 
 		payCounts[receiptInfo.OriginalTransactionID] += 1
 
-		if activeReceiptInfo == nil || receiptInfo.ExpiryTime().After(activeReceiptInfo.ExpiryTime()) {
+		if activeReceiptInfo == nil || receiptInfo.ExpiresDate().After(activeReceiptInfo.ExpiresDate()) {
 			activeReceiptInfo = receiptInfo
 		}
 	}
@@ -97,17 +97,16 @@ func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []
 		return nil
 	}
 
-	transactionInfo := &TransactionInfo{
-		ActiveReceiptInfo: activeReceiptInfo,
-	}
-
+	transactionInfo := new(TransactionInfo)
+	transactionInfo.ReceiptInfo = *activeReceiptInfo
 	for _, renewalInfo := range pendingRenewalInfo {
 
 		if activeReceiptInfo.ProductID == renewalInfo.ProductID {
-			transactionInfo.RenewalInfo = renewalInfo
+			transactionInfo.RenewalInfo = *renewalInfo
 			break
 		}
 	}
+	transactionInfo.PayCount = payCounts[activeReceiptInfo.OriginalTransactionID]
 
 	return transactionInfo
 }

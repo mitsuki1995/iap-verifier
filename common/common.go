@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -41,4 +42,12 @@ func PostJSON(url string, body interface{}) (*http.Response, error) {
 	}
 
 	return response, nil
+}
+
+func TimeMillisStringToTime(timeMillisString string) time.Time {
+	timeMillis, err := strconv.ParseFloat(timeMillisString, 64)
+	if err != nil {
+		return time.Unix(0, 0)
+	}
+	return time.Unix(int64(timeMillis)/1e3, (int64(timeMillis)%1e3)*1e6)
 }
