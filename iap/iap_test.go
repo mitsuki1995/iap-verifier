@@ -7,19 +7,25 @@ import (
 	"testing"
 )
 
+func readString(filename string) string {
+	if b, err := ioutil.ReadFile(filename); err != nil {
+		return ""
+	} else {
+		return string(b)
+	}
+}
+
 func TestIOSVerifier(t *testing.T) {
 
 	// File ReceiptData: base64 encoded string
-	if b, err := ioutil.ReadFile("ReceiptData"); err != nil {
-		t.Fatal(err)
+	receiptData := readString("ReceiptData")
+	password := readString("password")
+	v := ios.NewVerifier(password, false)
+	infos, err := v.Verify(receiptData, false, false)
+	if err != nil {
+		t.Error(err)
 	} else {
-		info, err := ios.Verify("b5e0eb1004684720a70f8dfd1bfe0d9e", string(b), "", false, false)
-		if err != nil {
-			t.Error(err)
-		} else {
-			b, _ := json.MarshalIndent(info, "", "  ")
-			t.Log(string(b))
-			t.Log(info.ReceiptInfo.ExpiresDate())
-		}
+		b, _ := json.MarshalIndent(infos, "", "  ")
+		t.Log(string(b))
 	}
 }
