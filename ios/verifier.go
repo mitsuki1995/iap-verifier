@@ -25,7 +25,7 @@ func NewVerifier(password string, isDebug bool) *Verifier {
 	}
 }
 
-func (v *Verifier) Verify(receiptData string, excludeOldTransactions bool, isDebug bool) (map[string]*TransactionInfo, error) {
+func (v *Verifier) Verify(receiptData string, excludeOldTransactions bool) (map[string]*TransactionInfo, error) {
 	return v.verifyReceipt(receiptData, excludeOldTransactions, false)
 }
 

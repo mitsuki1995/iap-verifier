@@ -21,7 +21,7 @@ func TestIOSVerifier(t *testing.T) {
 	receiptData := readString("ReceiptData")
 	password := readString("password")
 	v := ios.NewVerifier(password, false)
-	infos, err := v.Verify(receiptData, false, false)
+	infos, err := v.Verify(receiptData, false)
 	if err != nil {
 		t.Error(err)
 	} else {
