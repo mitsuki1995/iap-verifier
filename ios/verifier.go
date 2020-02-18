@@ -13,12 +13,12 @@ const (
 	iOSProductionVerifyURL = "https://buy.itunes.apple.com/verifyReceipt"
 )
 
-func Verify(password string, receiptData string, excludeOldTransactions bool, isDebug bool) (*TransactionInfo, error) {
-	return verifyReceipt(password, receiptData, excludeOldTransactions, isDebug, false)
+func Verify(password string, receiptData string, productID string, excludeOldTransactions bool, isDebug bool) (*TransactionInfo, error) {
+	return verifyReceipt(password, receiptData, productID, excludeOldTransactions, isDebug, false)
 }
 
 // reversed: 如果为 true, 正式服务器会找苹果的沙盒服务器进行验证, 测试服务器会找苹果的正式服务器进行验证
-func verifyReceipt(password string, receiptData string, excludeOldTransactions bool, isDebug bool, reversed bool) (*TransactionInfo, error) {
+func verifyReceipt(password string, receiptData string, productID string, excludeOldTransactions bool, isDebug bool, reversed bool) (*TransactionInfo, error) {
 
 	url := iOSSandboxVerifyURL
 	if isDebug == reversed {
@@ -54,18 +54,18 @@ func verifyReceipt(password string, receiptData string, excludeOldTransactions b
 
 		// This receipt is from the test environment, but it was sent to the production environment for verification.
 		if status == 21007 && !reversed { // 测试环境的收据提交到了正式服务器
-			return verifyReceipt(password, receiptData, excludeOldTransactions, isDebug, true)
+			return verifyReceipt(password, receiptData, productID, excludeOldTransactions, isDebug, true)
 		}
 
 		// This receipt is from the production environment, but it was sent to the test environment for verification.
 		if status == 21008 && !reversed { // 正式环境的收据提交到了测试服务器
-			return verifyReceipt(password, receiptData, excludeOldTransactions, isDebug, true)
+			return verifyReceipt(password, receiptData, productID, excludeOldTransactions, isDebug, true)
 		}
 
 		return nil, fmt.Errorf("invalid status: %d", status)
 	}
 
-	transactionInfo := findTransactionInfo(body.LatestReceiptInfo, body.PendingRenewalInfo)
+	transactionInfo := FindTransactionInfo(body.LatestReceiptInfo, body.PendingRenewalInfo, productID)
 
 	if transactionInfo == nil {
 		return nil, common.TransactionNotFoundError
@@ -75,7 +75,7 @@ func verifyReceipt(password string, receiptData string, excludeOldTransactions b
 }
 
 // 查找尚未过期且过期时间最靠后的一条交易, 找不到返回 nil
-func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []*RenewalInfo) *TransactionInfo {
+func FindTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []*RenewalInfo, productID string) *TransactionInfo {
 
 	var payCounts = make(map[string]int) // key: original_transaction_id
 
@@ -87,6 +87,10 @@ func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []
 		}
 
 		if len(receiptInfo.ProductID) == 0 || len(receiptInfo.OriginalTransactionID) == 0 || len(receiptInfo.ExpiresDateMS) == 0 {
+			continue
+		}
+
+		if len(productID) > 0 && receiptInfo.ProductID != productID {
 			continue
 		}
 

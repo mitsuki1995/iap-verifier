@@ -13,7 +13,7 @@ func TestIOSVerifier(t *testing.T) {
 	if b, err := ioutil.ReadFile("ReceiptData"); err != nil {
 		t.Fatal(err)
 	} else {
-		info, err := ios.Verify("b5e0eb1004684720a70f8dfd1bfe0d9e", string(b), false, false)
+		info, err := ios.Verify("b5e0eb1004684720a70f8dfd1bfe0d9e", string(b), "", false, false)
 		if err != nil {
 			t.Error(err)
 		} else {
