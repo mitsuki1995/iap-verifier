@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/mitsuki1995/iap-verifier/common"
 	"io/ioutil"
+	"log"
 )
 
 const (
@@ -42,6 +43,9 @@ func verifyReceipt(password string, receiptData string, excludeOldTransactions b
 	if err := json.Unmarshal(resultByte, body); err != nil {
 		return nil, fmt.Errorf("unmarshal body error: %s", err.Error())
 	}
+
+	b, _ := json.MarshalIndent(body, "", "  ")
+	log.Println(string(b))
 
 	status := body.Status
 
@@ -86,7 +90,9 @@ func findTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []
 			continue
 		}
 
-		payCounts[receiptInfo.OriginalTransactionID] += 1
+		if !receiptInfo.IsTrialPeriod.Bool() {
+			payCounts[receiptInfo.OriginalTransactionID] += 1
+		}
 
 		if activeReceiptInfo == nil || receiptInfo.ExpiresDate().After(activeReceiptInfo.ExpiresDate()) {
 			activeReceiptInfo = receiptInfo
