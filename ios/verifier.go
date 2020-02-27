@@ -81,7 +81,7 @@ func (v *Verifier) verifyReceipt(receiptData string, excludeOldTransactions bool
 // key: productID
 func (v *Verifier) FindTransactionInfo(latestReceiptInfo []*ReceiptInfo, pendingRenewalInfo []*RenewalInfo) map[string]*TransactionInfo {
 
-	var payCounts = make(map[string]int) // key: original_transaction_id
+	var payCounts = make(map[string]int) // key: product_id
 
 	transactionInfos := make(map[string]*TransactionInfo)
 	for _, receiptInfo := range latestReceiptInfo {
@@ -96,7 +96,7 @@ func (v *Verifier) FindTransactionInfo(latestReceiptInfo []*ReceiptInfo, pending
 		}
 
 		if !receiptInfo.IsTrialPeriod.Bool() {
-			payCounts[receiptInfo.OriginalTransactionID] += 1
+			payCounts[receiptInfo.ProductID] += 1
 		}
 
 		transactionInfo := transactionInfos[receiptInfo.ProductID]
@@ -114,7 +114,7 @@ func (v *Verifier) FindTransactionInfo(latestReceiptInfo []*ReceiptInfo, pending
 	}
 
 	for _, transactionInfo := range transactionInfos {
-		transactionInfo.PayCount = payCounts[transactionInfo.ReceiptInfo.OriginalTransactionID]
+		transactionInfo.PayCount = payCounts[transactionInfo.ReceiptInfo.ProductID]
 	}
 
 	return transactionInfos

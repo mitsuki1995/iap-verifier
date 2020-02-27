@@ -18,9 +18,9 @@ func readString(filename string) string {
 func TestIOSVerifier(t *testing.T) {
 
 	// File ReceiptData: base64 encoded string
-	receiptData := readString("ReceiptData")
+	receiptData := readString("ReceiptData1")
 	password := readString("password")
-	v := ios.NewVerifier(password, false)
+	v := ios.NewVerifier(password, true)
 	infos, err := v.Verify(receiptData, false)
 	if err != nil {
 		t.Error(err)
